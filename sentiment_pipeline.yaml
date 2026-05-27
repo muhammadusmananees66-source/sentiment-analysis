@@ -1,0 +1,404 @@
+# PIPELINE DEFINITION
+# Name: sentiment-analysis-pipeline
+# Description: End-to-end ML pipeline for sentiment analysis
+# Inputs:
+#    batch_size: int [Default: 8.0]
+#    dataset_name: str [Default: 'imdb']
+#    learning_rate: float [Default: 2e-05]
+#    model_name: str [Default: 'distilbert-base-uncased']
+#    num_epochs: int [Default: 1.0]
+#    split: str [Default: 'train[:100]']
+components:
+  comp-deploy-model:
+    executorLabel: exec-deploy-model
+    inputDefinitions:
+      artifacts:
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        model_name:
+          defaultValue: sentiment-model
+          isOptional: true
+          parameterType: STRING
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-load-data:
+    executorLabel: exec-load-data
+    inputDefinitions:
+      parameters:
+        dataset_name:
+          parameterType: STRING
+        split:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        Output:
+          parameterType: STRING
+  comp-preprocess-data:
+    executorLabel: exec-preprocess-data
+    inputDefinitions:
+      artifacts:
+        input_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        model_name:
+          defaultValue: distilbert-base-uncased
+          isOptional: true
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        output_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        num_classes:
+          parameterType: NUMBER_INTEGER
+        num_samples:
+          parameterType: NUMBER_INTEGER
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        preprocessed_data:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        batch_size:
+          defaultValue: 8.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+        learning_rate:
+          defaultValue: 2.0e-05
+          isOptional: true
+          parameterType: NUMBER_DOUBLE
+        model_name:
+          defaultValue: distilbert-base-uncased
+          isOptional: true
+          parameterType: STRING
+        num_epochs:
+          defaultValue: 3.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      artifacts:
+        metrics_output:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+        model_output:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        Output:
+          parameterType: NUMBER_DOUBLE
+deploymentSpec:
+  executors:
+    exec-deploy-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - deploy_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'boto3' 'fastapi'\
+          \ 'uvicorn'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef deploy_model(\n    model: Input[Model],\n    model_name: str\
+          \ = \"sentiment-model\"\n) -> str:\n    \"\"\"Deploy model to SageMaker\
+          \ endpoint (simplified)\"\"\"\n    import json\n\n    model_path = model.path\n\
+          \    print(f\"Model ready for deployment at: {model_path}\")\n\n    deployment_info\
+          \ = {\n        \"model_name\": model_name,\n        \"model_path\": model_path,\n\
+          \        \"status\": \"ready\",\n        \"endpoint\": f\"s3://mlops-models/{model_name}\"\
+          \n    }\n\n    with open(\"/tmp/deployment.json\", \"w\") as f:\n      \
+          \  json.dump(deployment_info, f)\n\n    return model_path\n\n"
+        image: python:3.11
+    exec-load-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - load_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'datasets>=3.0.0'\
+          \ 'transformers>=4.46.0' 'torch>=2.5.0' 'pandas>=2.2.3'  &&  python3 -m\
+          \ pip install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps'\
+          \ 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"$0\" \"$@\"\
+          \n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef load_data(\n    dataset_name: str,\n    split: str,\n    output_dataset:\
+          \ Output[Dataset]\n) -> str:\n    \"\"\"Load dataset from Hugging Face Hub\"\
+          \"\"\n    import json\n    from datasets import load_dataset\n    import\
+          \ pandas as pd\n\n    print(f\"Loading dataset: {dataset_name}, split: {split}\"\
+          )\n    dataset = load_dataset(dataset_name, split=split)\n\n    df = dataset.to_pandas()\n\
+          \n    csv_path = f\"{output_dataset.path}/data.csv\"\n    df.to_csv(csv_path,\
+          \ index=False)\n\n    metadata = {\n        \"dataset_name\": dataset_name,\n\
+          \        \"split\": split,\n        \"num_samples\": len(df),\n        \"\
+          columns\": list(df.columns)\n    }\n    with open(f\"{output_dataset.path}/metadata.json\"\
+          , \"w\") as f:\n        json.dump(metadata, f)\n\n    print(f\"\u2705 Data\
+          \ loaded: {len(df)} samples\")\n    return csv_path\n\n"
+        image: python:3.11
+    exec-preprocess-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - preprocess_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas>=2.2.3'\
+          \ 'numpy>=2.0.0' 'transformers>=4.46.0' 'torch>=2.5.0'  &&  python3 -m pip\
+          \ install --quiet --no-warn-script-location 'kfp==2.16.1' '--no-deps' 'typing-extensions>=3.7.4,<5;\
+          \ python_version<\"3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef preprocess_data(\n    input_data: Input[Dataset],\n    output_data:\
+          \ Output[Dataset],\n    model_name: str = \"distilbert-base-uncased\"\n\
+          ) -> NamedTuple('Outputs', [\n    ('num_samples', int),\n    ('num_classes',\
+          \ int)\n]):\n    \"\"\"Preprocess text data for sentiment analysis\"\"\"\
+          \n    import pandas as pd\n    from transformers import AutoTokenizer\n\
+          \    from collections import namedtuple\n\n    df = pd.read_csv(f\"{input_data.path}/data.csv\"\
+          )\n    print(f\"Processing {len(df)} samples\")\n\n    tokenizer = AutoTokenizer.from_pretrained(model_name)\n\
+          \n    text_column = 'text' if 'text' in df.columns else 'sentence'\n   \
+          \ label_column = 'label' if 'label' in df.columns else 'labels'\n\n    encodings\
+          \ = tokenizer(\n        df[text_column].tolist(),\n        truncation=True,\n\
+          \        padding=True,\n        max_length=128,\n        return_tensors=None\n\
+          \    )\n\n    df['input_ids'] = encodings['input_ids']\n    df['attention_mask']\
+          \ = encodings['attention_mask']\n    df.to_csv(f\"{output_data.path}/preprocessed.csv\"\
+          , index=False)\n\n    tokenizer.save_pretrained(output_data.path)\n\n  \
+          \  outputs = namedtuple('Outputs', ['num_samples', 'num_classes'])\n   \
+          \ return outputs(len(df), df[label_column].nunique())\n\n"
+        image: python:3.11
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'torch>=2.5.0'\
+          \ 'transformers>=4.46.0' 'datasets>=3.0.0' 'scikit-learn>=1.6.0' 'pandas>=2.2.3'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(\n    preprocessed_data: Input[Dataset],\n    model_output:\
+          \ Output[Model],\n    metrics_output: Output[Metrics],\n    model_name:\
+          \ str = \"distilbert-base-uncased\",\n    num_epochs: int = 3,\n    batch_size:\
+          \ int = 8,\n    learning_rate: float = 2e-5\n) -> float:\n    \"\"\"Train\
+          \ a sentiment analysis model\"\"\"\n    import pandas as pd\n    import\
+          \ torch\n    from torch.utils.data import Dataset\n    from transformers\
+          \ import (\n        AutoTokenizer,\n        AutoModelForSequenceClassification,\n\
+          \        Trainer,\n        TrainingArguments\n    )\n    from sklearn.metrics\
+          \ import accuracy_score\n    from sklearn.model_selection import train_test_split\n\
+          \    import json\n\n    df = pd.read_csv(f\"{preprocessed_data.path}/preprocessed.csv\"\
+          )\n\n    class SentimentDataset(Dataset):\n        def __init__(self, df):\n\
+          \            self.input_ids = torch.tensor(df['input_ids'].tolist())\n \
+          \           self.attention_mask = torch.tensor(df['attention_mask'].tolist())\n\
+          \            self.labels = torch.tensor(df['label'].tolist())\n\n      \
+          \  def __len__(self):\n            return len(self.labels)\n\n        def\
+          \ __getitem__(self, idx):\n            return {\n                'input_ids':\
+          \ self.input_ids[idx],\n                'attention_mask': self.attention_mask[idx],\n\
+          \                'labels': self.labels[idx]\n            }\n\n    train_df,\
+          \ eval_df = train_test_split(df, test_size=0.2, random_state=42)\n\n   \
+          \ train_dataset = SentimentDataset(train_df)\n    eval_dataset = SentimentDataset(eval_df)\n\
+          \n    num_labels = df['label'].nunique()\n    model = AutoModelForSequenceClassification.from_pretrained(\n\
+          \        model_name, \n        num_labels=num_labels\n    )\n    tokenizer\
+          \ = AutoTokenizer.from_pretrained(model_name)\n\n    training_args = TrainingArguments(\n\
+          \        output_dir=\"./results\",\n        num_train_epochs=num_epochs,\n\
+          \        per_device_train_batch_size=batch_size,\n        per_device_eval_batch_size=batch_size,\n\
+          \        warmup_steps=10,\n        weight_decay=0.01,\n        logging_dir=\"\
+          ./logs\",\n        logging_steps=10,\n        evaluation_strategy=\"epoch\"\
+          ,\n        save_strategy=\"epoch\",\n        load_best_model_at_end=True,\n\
+          \    )\n\n    trainer = Trainer(\n        model=model,\n        args=training_args,\n\
+          \        train_dataset=train_dataset,\n        eval_dataset=eval_dataset,\n\
+          \        compute_metrics=lambda p: {\n            'accuracy': accuracy_score(p.label_ids,\
+          \ p.predictions.argmax(-1))\n        }\n    )\n\n    trainer.train()\n\n\
+          \    eval_results = trainer.evaluate()\n    accuracy = eval_results.get('eval_accuracy',\
+          \ 0.0)\n\n    model.save_pretrained(model_output.path)\n    tokenizer.save_pretrained(model_output.path)\n\
+          \n    metrics_output.log_metric(\"accuracy\", accuracy)\n    metrics_output.log_metric(\"\
+          eval_loss\", eval_results.get('eval_loss', 0.0))\n\n    with open(f\"{metrics_output.path}/metrics.json\"\
+          , \"w\") as f:\n        json.dump(eval_results, f)\n\n    print(f\"\u2705\
+          \ Training complete! Accuracy: {accuracy:.4f}\")\n    return accuracy\n\n"
+        image: python:3.11
+pipelineInfo:
+  description: End-to-end ML pipeline for sentiment analysis
+  name: sentiment-analysis-pipeline
+root:
+  dag:
+    tasks:
+      deploy-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-deploy-model
+        dependentTasks:
+        - train-model
+        inputs:
+          artifacts:
+            model:
+              taskOutputArtifact:
+                outputArtifactKey: model_output
+                producerTask: train-model
+          parameters:
+            model_name:
+              runtimeValue:
+                constant: sentiment-model
+        taskInfo:
+          name: deploy-model
+      load-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-load-data
+        inputs:
+          parameters:
+            dataset_name:
+              componentInputParameter: dataset_name
+            split:
+              componentInputParameter: split
+        taskInfo:
+          name: load-data
+      preprocess-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-preprocess-data
+        dependentTasks:
+        - load-data
+        inputs:
+          artifacts:
+            input_data:
+              taskOutputArtifact:
+                outputArtifactKey: output_dataset
+                producerTask: load-data
+          parameters:
+            model_name:
+              componentInputParameter: model_name
+        taskInfo:
+          name: preprocess-data
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - preprocess-data
+        inputs:
+          artifacts:
+            preprocessed_data:
+              taskOutputArtifact:
+                outputArtifactKey: output_data
+                producerTask: preprocess-data
+          parameters:
+            batch_size:
+              componentInputParameter: batch_size
+            learning_rate:
+              componentInputParameter: learning_rate
+            model_name:
+              componentInputParameter: model_name
+            num_epochs:
+              componentInputParameter: num_epochs
+        taskInfo:
+          name: train-model
+  inputDefinitions:
+    parameters:
+      batch_size:
+        defaultValue: 8.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      dataset_name:
+        defaultValue: imdb
+        isOptional: true
+        parameterType: STRING
+      learning_rate:
+        defaultValue: 2.0e-05
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+      model_name:
+        defaultValue: distilbert-base-uncased
+        isOptional: true
+        parameterType: STRING
+      num_epochs:
+        defaultValue: 1.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      split:
+        defaultValue: train[:100]
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.1

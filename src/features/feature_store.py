@@ -39,3 +39,5 @@ class SentimentFeatureStore:
             "text_length": len(text),
             "word_count": len(text.split())
         }])
+    
+    
