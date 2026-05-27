@@ -299,3 +299,5 @@ if __name__ == "__main__":
     print("\n📋 To run this pipeline:")
     print("   1. Upload sentiment_pipeline.yaml to Kubeflow Pipelines UI")
     print("   2. Or run with: kfp run create --experiment sentiment --run sentiment_pipeline.yaml")
+
+
