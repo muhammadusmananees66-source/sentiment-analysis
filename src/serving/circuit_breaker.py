@@ -1,4 +1,4 @@
-# src/serving/circuit_breaker.py
+
 import time
 
 class CircuitBreaker:
