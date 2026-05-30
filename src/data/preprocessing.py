@@ -14,14 +14,23 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from bs4 import BeautifulSoup
 import contractions
 
-# Download NLTK data (run once)
+# Download NLTK data (run once) - FIXED for NLTK 3.9+
 try:
-    nltk.data.find('tokenizers/punkt')
+    nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
+    nltk.download('punkt_tab')
     nltk.download('punkt')
     nltk.download('stopwords')
     nltk.download('wordnet')
     nltk.download('omw-1.4')
+
+# Also ensure punkt is available as fallback
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
+
 
 class TextPreprocessor(BaseEstimator, TransformerMixin):
     """

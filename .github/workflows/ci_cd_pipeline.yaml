@@ -3,7 +3,7 @@ name: MLOps CI/CD Pipeline
 on:
   push:
     branches: [ main, develop ]
-    paths:
+    paths:                     # "Only trigger when push contains changes to these specific folders"
       - 'src/**'
       - 'tests/**'
       - 'configs/**'
