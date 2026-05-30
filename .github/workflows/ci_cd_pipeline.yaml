@@ -64,18 +64,6 @@ for resource in resources:
         print(f'Failed to download {resource}: {e}')
 "
 
-    - name: Verify NLTK data
-      run: |
-        python -c "
-import nltk
-try:
-    nltk.data.find('tokenizers/punkt_tab')
-    nltk.data.find('corpora/stopwords')
-    print('NLTK data verified')
-except LookupError as e:
-    print(f'NLTK data missing: {e}')
-"
-
     - name: Run unit tests
       run: |
         pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html -n 0
@@ -93,13 +81,6 @@ except LookupError as e:
       with:
         file: ./coverage.xml
         fail_ci_if_error: false
-
-    - name: Lint code
-      run: |
-        flake8 src tests --max-line-length=120 || echo "Linting warnings found"
-        black --check src tests || echo "Black formatting issues found"
-        isort --check-only src tests || echo "Import sorting issues found"
-      continue-on-error: true
 
   build-and-push:
     needs: test
