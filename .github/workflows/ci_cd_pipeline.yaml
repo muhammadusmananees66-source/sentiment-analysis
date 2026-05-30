@@ -7,8 +7,16 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'configs/**'
+      - '.github/workflows/**'  # ADD THIS - trigger when workflow changes
+      - 'scripts/**'            # ADD THIS - trigger when scripts change
   pull_request:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'configs/**'
+      - '.github/workflows/**'
+      - 'scripts/**'
 
 env:
   REGISTRY: ghcr.io
@@ -41,32 +49,10 @@ jobs:
         pip install pytest pytest-cov pytest-xdist flake8 black isort
 
     - name: Download NLTK data
-      run: |
-        python -c "
-import nltk
-import ssl
-import sys
-
-try:
-    _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
-else:
-    ssl._create_default_https_context = _create_unverified_https_context
-
-resources = ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'omw-1.4']
-for resource in resources:
-    try:
-        print(f'Downloading {resource}...')
-        nltk.download(resource, quiet=False)
-        print(f'Successfully downloaded {resource}')
-    except Exception as e:
-        print(f'Failed to download {resource}: {e}')
-"
+      run: python scripts/download_nltk.py
 
     - name: Run unit tests
-      run: |
-        pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html -n 0
+      run: pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html -n 0
 
     - name: Run integration tests
       run: |
@@ -81,6 +67,13 @@ for resource in resources:
       with:
         file: ./coverage.xml
         fail_ci_if_error: false
+
+    - name: Lint code
+      run: |
+        flake8 src tests --max-line-length=120 || echo "Linting warnings found"
+        black --check src tests || echo "Black formatting issues found"
+        isort --check-only src tests || echo "Import sorting issues found"
+      continue-on-error: true
 
   build-and-push:
     needs: test
