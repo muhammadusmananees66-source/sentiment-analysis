@@ -18,9 +18,14 @@ on:
       - '.github/workflows/**'
       - 'scripts/**'
 
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/sentiment-mlops
+  IMAGE_NAME: ${{ github.repository_owner }}/sentiment-mlops
   MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
 
 jobs:
@@ -79,6 +84,11 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
 
     steps:
     - uses: actions/checkout@v4
