@@ -115,6 +115,63 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+  push-to-ecr:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Pull from GHCR
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        docker pull ghcr.io/${{ github.repository }}/sentiment-mlops:latest
+    
+    - name: Tag and push to ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker tag ghcr.io/${{ github.repository }}/sentiment-mlops:latest $ECR_REGISTRY/sentiment-mlops:latest
+        docker push $ECR_REGISTRY/sentiment-mlops:latest
+
+  deploy-sagemaker:
+    needs: push-to-ecr
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+    
+    - name: Deploy to SageMaker
+      run: |
+        pip install boto3 sagemaker
+        python scripts/deploy_sagemaker_ghcr.py \
+          --image ${{ steps.login-ecr.outputs.registry }}/sentiment-mlops:latest \
+          --model-name sentiment-model-${{ github.run_number }} \
+          --endpoint-name sentiment-endpoint-${{ github.run_number }} \
+          --instance-type ml.t2.medium \
+          --region us-east-1
+
   deploy-kubeflow:
     needs: build-and-push
     runs-on: ubuntu-latest
