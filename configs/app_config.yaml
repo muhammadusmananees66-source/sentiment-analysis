@@ -1,0 +1,25 @@
+# Sentiment Analysis Application Configuration
+app:
+  name: sentiment-analysis
+  version: 1.0.0
+  environment: production
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  workers: 4
+
+mlflow:
+  tracking_uri: http://mlflow-service:5000
+  experiment_name: sentiment_analysis
+
+model:
+  name: sentiment_classifier
+  version: latest
+  threshold: 0.5
+
+monitoring:
+  drift_threshold: 0.1
+  alert_channels:
+    - slack
+    - pagerduty
