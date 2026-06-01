@@ -26,6 +26,8 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/sentiment-mlops
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: sentiment-mlops
   MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
 
 jobs:
@@ -119,29 +121,35 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    
     steps:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+        aws-region: ${{ env.AWS_REGION }}
     
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
     
+    - name: Create ECR repository if not exists
+      run: |
+        aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} 2>/dev/null || \
+        aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
+    
     - name: Pull from GHCR
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-        docker pull ghcr.io/${{ github.repository }}/sentiment-mlops:latest
+        docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
     
     - name: Tag and push to ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-        docker tag ghcr.io/${{ github.repository }}/sentiment-mlops:latest $ECR_REGISTRY/sentiment-mlops:latest
-        docker push $ECR_REGISTRY/sentiment-mlops:latest
+        docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+        docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
 
   deploy-sagemaker:
     needs: push-to-ecr
@@ -156,7 +164,7 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
+        aws-region: ${{ env.AWS_REGION }}
     
     - name: Login to Amazon ECR
       id: login-ecr
@@ -166,11 +174,11 @@ jobs:
       run: |
         pip install boto3 sagemaker
         python scripts/deploy_sagemaker_ghcr.py \
-          --image ${{ steps.login-ecr.outputs.registry }}/sentiment-mlops:latest \
+          --image ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest \
           --model-name sentiment-model-${{ github.run_number }} \
           --endpoint-name sentiment-endpoint-${{ github.run_number }} \
           --instance-type ml.t2.medium \
-          --region us-east-1
+          --region ${{ env.AWS_REGION }}
 
   deploy-kubeflow:
     needs: build-and-push
