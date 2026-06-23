@@ -69,7 +69,6 @@ This platform delivers a **fully automated, end-to-end NLP machine learning syst
 
 ### Monitoring & Observability
 - Model performance tracking, data drift detection, and system health monitoring  
-- Integration with alerting systems (Slack / PagerDuty)  
 
 ---
 
@@ -214,8 +213,7 @@ Automation is doing a single task automatically. Orchestration is the manager co
 - Model registry and versioning  
 - CI/CD pipelines for ML using GitHub Actions  
 - Model serving and inference APIs  
-- Model monitoring and drift detection  
-- A/B testing and canary deployments  
+- Model monitoring and drift detection    
 
 ---
 
