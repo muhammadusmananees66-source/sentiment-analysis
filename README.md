@@ -81,25 +81,7 @@ This platform delivers a **fully automated, end-to-end NLP machine learning syst
 - **Scalability:** Handles 10,000+ requests/second with auto-scaling architecture  
 - **Reliability:** 99.9% uptime enabled through health checks, retries, and circuit breakers  
 
-# System Architecture
-
-```mermaid
-graph TD
-    A[HuggingFace Dataset] --> B[Data Ingestion]
-    B --> C[Data Preprocessing]
-    C --> D[DistilBERT Training]
-    D --> E[MLflow Tracking]
-    E --> F[Model Registry]
-    F --> G["Deployment (SageMaker/K8s)"]
-    G --> H[FastAPI Inference Service]
-
-    H --> I[Redis Cache]
-    H --> J[Prometheus Monitoring]
-    H --> K[Evidently AI Drift Detection]
-
-    K --> L["Slack/PagerDuty Alerts"]
-```
-
+# Orchestration
 **Orchestration is a key element in this platform.** It is the automatic coordination of multiple tasks, services, and processes so they work together in the correct order.
 
 In this project, **Kubeflow Pipelines** acts as the conductor of an orchestra of tasks:
